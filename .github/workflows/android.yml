@@ -18,13 +18,22 @@ jobs:
           unzip -q android-ndk-r26d-linux.zip
           echo "ANDROID_NDK_HOME=$PWD/android-ndk-r26d" >> $GITHUB_ENV
 
+      - name: Download NNUE network
+        run: |
+          curl -sL https://github.com/kevlu8/PZChessBot-Networks/releases/latest/download/nnue.bin -o nnue.bin || \
+          curl -sL https://github.com/kevlu8/PZChessBot-Networks/raw/main/nnue.bin -o nnue.bin
+
+      - name: Patch missing headers in source
+        run: |
+          sed -i '1i #include <sstream>' engine/search.cpp
+
       - name: Build PZChessBot (ARM64)
         run: |
-          make arm \
+          make pzchessbot \
             CXX=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android28-clang++ \
             OPTFLAGS="-O3 -flto=auto -march=armv8-a" \
-            BASEFLAGS="-std=c++20 -DNNUE_PATH=\\\"nnue.bin\\\" -DVERSION=\\\"v-android\\\" -static-libstdc++" \
-            EXE=pzchessbot
+            BASEFLAGS="-std=c++20 -DNNUE_PATH=\\\"nnue.bin\\\" -DVERSION=\\\"v-android\\\"" \
+            LDFLAGS="-static-libstdc++"
 
       - name: Verify output
         run: |
