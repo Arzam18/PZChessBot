@@ -2,6 +2,10 @@ name: Build PZChessBot Android
 
 on:
   workflow_dispatch:
+  push:
+    branches: [ "*" ]
+  pull_request:
+    branches: [ "*" ]
 
 permissions:
   contents: write
@@ -9,8 +13,10 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
       - name: Install Android NDK
         run: |
@@ -23,9 +29,13 @@ jobs:
           curl -sL https://github.com/kevlu8/PZChessBot-Networks/releases/latest/download/nnue.bin -o nnue.bin || \
           curl -sL https://github.com/kevlu8/PZChessBot-Networks/raw/main/nnue.bin -o nnue.bin
 
-      - name: Patch missing headers in source
+      - name: Patch Android Source Compatibility
         run: |
+          # Fix missing sstream in search.cpp if needed
           sed -i '1i #include <sstream>' engine/search.cpp
+
+          # Comment out non-portable glibc pthread call not present in Android Bionic
+          sed -i 's/pthread_setattr_default_np/\/\/ pthread_setattr_default_np/g' engine/threads.cpp
 
       - name: Build PZChessBot (ARM64)
         run: |
@@ -35,17 +45,19 @@ jobs:
             BASEFLAGS="-std=c++20 -DNNUE_PATH=\\\"nnue.bin\\\" -DVERSION=\\\"v-android\\\"" \
             LDFLAGS="-static-libstdc++"
 
-      - name: Verify output
+      - name: Verify Output
         run: |
           ls -la pzchessbot
+          file pzchessbot
 
-      - name: Upload artifact
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: pzchessbot-android-arm64
           path: pzchessbot
 
-      - name: Create prerelease
+      - name: Create Prerelease
+        if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: android-build-${{ github.run_number }}
