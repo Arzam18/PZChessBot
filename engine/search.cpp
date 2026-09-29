@@ -653,7 +653,7 @@ Value negamax(Position &pos, ThreadInfo &ti, SSEntry *ss, int depth, Value alpha
 	}
 
 	// Razoring
-	if (!pv && !in_check && depth <= 8 && tt_corr_eval + razor_margin() * depth < alpha && !excluded && abs(alpha) < 2000) {
+	if (!excluded && !pv && !in_check && depth <= 8 && tt_corr_eval + razor_margin() * depth < alpha && (!tentry || ttcapt) && abs(alpha) < 2000) {
 		/**
 		 * If we are losing by a lot, check w/ qsearch to see if we could possibly improve.
 		 * If not, we can prune the search.
@@ -875,7 +875,7 @@ Value negamax(Position &pos, ThreadInfo &ti, SSEntry *ss, int depth, Value alpha
 				 *
 				 * Skip searching moves with bad SEE scores
 				 */
-				const int see_threshold = capt ? -see_quad() * depth * depth : -see_lin() * depth;
+				const int see_threshold = capt ? -see_quad() * depth * depth : -see_lin() * depth - hist / see_hist();
 				bool see = pos.see(move, see_threshold);
 				if (!see)
 					continue;
