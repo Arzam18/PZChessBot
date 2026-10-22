@@ -18,9 +18,16 @@
 
 #include "eval.hpp"
 
+#ifdef __linux__
+alignas(2 * 1024 * 1024) Network nnue_network;
+#else
 Network nnue_network;
+#endif
 
 __attribute__((constructor(102))) void init_network() {
+#ifdef __linux__
+	madvise(&nnue_network, sizeof(nnue_network), MADV_HUGEPAGE);
+#endif
 	nnue_network.load();
 }
 
@@ -42,9 +49,9 @@ Value eval(Position &pos, AccumulatorManager &am) {
 	int nbucket = (npieces - 2) / 4;
 
 	if (pos.side == WHITE) {
-		score = nnue_eval(nnue_network, am.current().w_acc, am.current().b_acc, nbucket);
+		score = nnue_eval(nnue_network, am.current().w_acc, am.current().b_acc, am.current().w_threats, am.current().b_threats, nbucket);
 	} else {
-		score = -nnue_eval(nnue_network, am.current().b_acc, am.current().w_acc, nbucket);
+		score = -nnue_eval(nnue_network, am.current().b_acc, am.current().w_acc, am.current().b_threats, am.current().w_threats, nbucket);
 	}
 
 	const int mat_phase = PawnValue * arch::popcnt(pos.piece_boards[PAWN]) + KnightValue * arch::popcnt(pos.piece_boards[KNIGHT]) +
@@ -79,11 +86,11 @@ std::array<Value, 8> debug_eval(Position &pos) {
 	std::array<Value, 8> score = {};
 	if (pos.side == WHITE) {
 		for (int i = 0; i < 8; i++) {
-			score[i] = nnue_eval(nnue_network, am->current().w_acc, am->current().b_acc, i);
+			score[i] = nnue_eval(nnue_network, am->current().w_acc, am->current().b_acc, am->current().w_threats, am->current().b_threats, i);
 		}
 	} else {
 		for (int i = 0; i < 8; i++) {
-			score[i] = -nnue_eval(nnue_network, am->current().b_acc, am->current().w_acc, i);
+			score[i] = -nnue_eval(nnue_network, am->current().b_acc, am->current().w_acc, am->current().b_threats, am->current().w_threats, i);
 		}
 	}
 
