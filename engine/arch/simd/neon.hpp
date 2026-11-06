@@ -81,6 +81,24 @@ namespace simd {
 	}
 
 	ivec accdp_u8i8_i32(ivec a, ivec b, ivec c) {
+#if defined(__ARM_FEATURE_DOTPROD)
+		// SDOT is signed x signed, while this NNUE layer is unsigned x signed.
+		// Re-bias each unsigned byte by -128, then add 128 * sum(b) for each
+		// four-byte dot-product group. This preserves the exact mathematical
+		// unsigned-byte x signed-byte result without changing network precision.
+		const uint8x16_t a_unsigned = vreinterpretq_u8_s16(a);
+		const int8x16_t a_signed = vreinterpretq_s8_u8(
+			veorq_u8(a_unsigned, vdupq_n_u8(0x80)));
+		const int8x16_t b_signed = vreinterpretq_s8_s16(b);
+
+		int32x4_t acc = vdotq_s32((int32x4_t)c, a_signed, b_signed);
+		const int16x8_t b_pair_sums = vpaddlq_s8(b_signed);
+		const int32x4_t b_group_sums = vpaddlq_s16(b_pair_sums);
+		acc = vaddq_s32(acc, vshlq_n_s32(b_group_sums, 7));
+		return (ivec)acc;
+#else
+		// ARMv8-A NEON baseline: widening multiply-accumulate. This computes
+		// the same unsaturated 16-byte dot product as the SDOT path above.
 		int16x8_t a_lo = (int16x8_t)vmovl_u8(vget_low_u8((uint8x16_t)a));
 		int16x8_t a_hi = (int16x8_t)vmovl_u8(vget_high_u8((uint8x16_t)a));
 
@@ -93,6 +111,7 @@ namespace simd {
 		acc = vmlal_s16(acc, vget_low_s16(a_hi), vget_low_s16(b_hi));
 		acc = vmlal_s16(acc, vget_high_s16(a_hi), vget_high_s16(b_hi));
 		return (ivec)acc;
+#endif
 	}
 
 	fvec cvt_i32_f32(ivec v) {
