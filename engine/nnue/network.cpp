@@ -20,11 +20,26 @@
 
 #include "incbin.h"
 
+#include <cstdio>
+#include <cstdlib>
+
 extern "C" {
 	INCBIN(network_weights, NNUE_PATH);
 }
 
 void Network::load() {
+	const size_t expected_size = sizeof(accumulator_weights) + sizeof(threat_weights) +
+		sizeof(accumulator_biases) + sizeof(l1_weights) + sizeof(l1_biases) +
+		sizeof(l2_weights) + sizeof(l2_biases) + sizeof(output_weights) +
+		sizeof(output_biases);
+	if (gnetwork_weightsSize != expected_size) {
+		fprintf(stderr,
+			"ERROR: embedded PZChessBot NNUE size mismatch (expected %zu bytes, got %u).\n",
+			expected_size, gnetwork_weightsSize);
+		fflush(stderr);
+		abort();
+	}
+
 	char *ptr = (char *)gnetwork_weightsData;
 
 	memcpy(accumulator_weights, ptr, sizeof(accumulator_weights));
