@@ -32,12 +32,22 @@ void Network::load() {
 		sizeof(accumulator_biases) + sizeof(l1_weights) + sizeof(l1_biases) +
 		sizeof(l2_weights) + sizeof(l2_biases) + sizeof(output_weights) +
 		sizeof(output_biases);
-	if (gnetwork_weightsSize != expected_size) {
+	// The official network asset can be padded to a 64-byte file boundary.
+	// The model arrays above account for expected_size bytes; Network::load()
+	// intentionally consumes only those arrays and does not read the tail.
+	const size_t padded_size = (expected_size + 63u) & ~size_t(63u);
+	if (gnetwork_weightsSize != expected_size &&
+		gnetwork_weightsSize != padded_size) {
 		fprintf(stderr,
-			"ERROR: embedded PZChessBot NNUE size mismatch (expected %zu bytes, got %u).\n",
-			expected_size, gnetwork_weightsSize);
+			"ERROR: embedded PZChessBot NNUE size mismatch (expected %zu bytes or its 64-byte-padded size %zu, got %u).\n",
+			expected_size, padded_size, gnetwork_weightsSize);
 		fflush(stderr);
 		abort();
+	}
+	if (gnetwork_weightsSize > expected_size) {
+		fprintf(stderr,
+			"PZChessBot NNUE: ignoring %zu trailing 64-byte-alignment bytes.\n",
+			static_cast<size_t>(gnetwork_weightsSize) - expected_size);
 	}
 
 	char *ptr = (char *)gnetwork_weightsData;
