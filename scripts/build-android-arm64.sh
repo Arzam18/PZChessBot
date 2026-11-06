@@ -30,17 +30,28 @@ NNUE_FILE="${PZ_NNUE_FILE:-$ROOT/nnue.bin}"
 if [[ "$NNUE_FILE" != /* ]]; then NNUE_FILE="$ROOT/$NNUE_FILE"; fi
 NNUE_URL="${PZ_NNUE_URL:-https://github.com/kevlu8/PZChessBot-Networks/releases/latest/download/nnue.bin}"
 EXPECTED_NNUE_BYTES=86921760
+# The published raw network may include up to the next 64-byte boundary.
+# This source consumes exactly EXPECTED_NNUE_BYTES; any alignment tail is ignored.
+PADDED_NNUE_BYTES=$(( (EXPECTED_NNUE_BYTES + 63) / 64 * 64 ))
 if [[ ! -s "$NNUE_FILE" ]]; then
   echo "Fetching PZChessBot NNUE from: $NNUE_URL"
   curl --fail --location --retry 3 --retry-delay 2 --output "$NNUE_FILE" "$NNUE_URL"
 fi
 ACTUAL_NNUE_BYTES="$(stat -c '%s' "$NNUE_FILE")"
-if [[ "$ACTUAL_NNUE_BYTES" != "$EXPECTED_NNUE_BYTES" ]]; then
+if [[ "$ACTUAL_NNUE_BYTES" != "$EXPECTED_NNUE_BYTES" &&
+      "$ACTUAL_NNUE_BYTES" != "$PADDED_NNUE_BYTES" ]]; then
   echo "ERROR: NNUE file size does not match this PZ source snapshot." >&2
-  echo "Expected: $EXPECTED_NNUE_BYTES bytes (source layout from engine/nnue/network.hpp)." >&2
+  echo "Expected the exact tensor payload ($EXPECTED_NNUE_BYTES bytes) or its 64-byte-padded form ($PADDED_NNUE_BYTES bytes)." >&2
   echo "Actual:   $ACTUAL_NNUE_BYTES bytes." >&2
   echo "Refusing to embed a possibly incompatible network." >&2
   exit 1
+fi
+if [[ "$ACTUAL_NNUE_BYTES" == "$PADDED_NNUE_BYTES" &&
+      "$PADDED_NNUE_BYTES" != "$EXPECTED_NNUE_BYTES" ]]; then
+  echo "Accepted 64-byte-aligned NNUE asset: $ACTUAL_NNUE_BYTES bytes."
+  echo "The source consumes the first $EXPECTED_NNUE_BYTES parameter bytes; the trailing $((PADDED_NNUE_BYTES - EXPECTED_NNUE_BYTES)) bytes are outside the declared network arrays."
+else
+  echo "Accepted exact NNUE tensor payload: $ACTUAL_NNUE_BYTES bytes."
 fi
 
 rm -rf artifacts
@@ -131,7 +142,9 @@ Compiler: $ANDROID_CXX
 Variant: $variant
 Architecture flags: -march=$march -mtune=cortex-a76
 NNUE: embedded into executable from nnue.bin
-NNUE size: $ACTUAL_NNUE_BYTES bytes
+NNUE asset size: $ACTUAL_NNUE_BYTES bytes
+NNUE tensor payload consumed: $EXPECTED_NNUE_BYTES bytes
+NNUE trailing alignment bytes: $((ACTUAL_NNUE_BYTES - EXPECTED_NNUE_BYTES))
 NEON: enabled
 Dotprod: $([[ "$mode" == dotprod ]] && echo enabled || echo disabled)
 C++ runtime: static libc++ (no libc++_shared.so dependency)
