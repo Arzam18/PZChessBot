@@ -20,6 +20,7 @@
 #include <cstring>
 #include <exception>
 #include <string>
+#include <stdexcept>
 
 #if defined(_WIN32)
 #define WIN32_LEAN_AND_MEAN
@@ -34,17 +35,17 @@ static void *large_alloc(size_t size) {
 	if (ptr == nullptr) {
 		ptr = VirtualAlloc(nullptr, size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
 		if (ptr == nullptr)
-			std::__throw_runtime_error(std::to_string(GetLastError()).c_str());
+			throw std::runtime_error(std::to_string(GetLastError()));
 	}
 #elif defined(__APPLE__)
 	void *ptr = mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
 	if (ptr == MAP_FAILED) {
-		std::__throw_runtime_error(strerror(errno));
+		throw std::runtime_error(std::strerror(errno));
 	}
 #elif defined(__linux__)
 	void *ptr = mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
 	if (ptr == MAP_FAILED) {
-		std::__throw_runtime_error(strerror(errno));
+		throw std::runtime_error(std::strerror(errno));
 	}
 
 	madvise(ptr, size, MADV_HUGEPAGE);

@@ -18,7 +18,7 @@
 
 #include "threads.hpp"
 
-#ifdef __linux__
+#if defined(__linux__) && !defined(__ANDROID__)
 #include <pthread.h>
 #endif
 
@@ -27,7 +27,9 @@
 #endif
 
 void raise_thread_stack_size() {
-#ifdef __linux__
+#if defined(__linux__) && !defined(__ANDROID__)
+	// pthread_setattr_default_np is a glibc extension and is not provided by
+	// Android Bionic. Android keeps its platform thread-stack default here.
 	constexpr size_t STACK_SIZE = 8 * 1024 * 1024; // 8 MB
 	pthread_attr_t attr;
 	pthread_attr_init(&attr);
