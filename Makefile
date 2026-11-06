@@ -56,7 +56,8 @@ HDRS	:= $(shell find engine -name "*.hpp") Pyrrhic/tbprobe.h
 OBJS	:= $(SRCS:.cpp=.o)
 DEPS	:= $(OBJS:.o=.d)
 
-.PHONY: all no-pext v3 v4 vnni arm native debug clean pgo pgo-compile
+.PHONY: all no-pext v3 v4 vnni arm native debug clean pgo pgo-compile \
+	android-neon android-dotprod
 
 # Default: native build
 all: pgo
@@ -82,6 +83,21 @@ native: $(EXE)
 
 debug: CXXFLAGS += $(BASEFLAGS) $(DEBUGFLAGS)
 debug: $(EXE)
+
+
+# Android ARM64 builds (NDK Clang). These are separate binaries because the
+# Dotprod executable requires ARMv8.2-A FEAT_DotProd at runtime.
+ANDROID_BASEFLAGS := $(BASEFLAGS) -O3 -flto=thin -DNDEBUG -fPIE -fuse-ld=lld
+ANDROID_TUNEFLAGS := -mtune=cortex-a76
+ANDROID_LDFLAGS := -pie -static-libstdc++ -Wl,-z,max-page-size=16384
+
+android-neon: CXXFLAGS += $(ANDROID_BASEFLAGS) -march=armv8-a+simd $(ANDROID_TUNEFLAGS)
+android-neon: LDFLAGS += $(ANDROID_LDFLAGS)
+android-neon: $(EXE)
+
+android-dotprod: CXXFLAGS += $(ANDROID_BASEFLAGS) -march=armv8.2-a+dotprod $(ANDROID_TUNEFLAGS)
+android-dotprod: LDFLAGS += $(ANDROID_LDFLAGS)
+android-dotprod: $(EXE)
 
 # Link final binary
 $(EXE): $(OBJS)
