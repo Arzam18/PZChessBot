@@ -1,0 +1,76 @@
+name: PZChessBot Android ARM64
+
+on:
+  workflow_dispatch:
+    inputs:
+      nnue_url:
+        description: "Optional compatible PZ NNUE URL (leave blank for the upstream latest nnue.bin)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pzchessbot-android-arm64-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout PZChessBot source
+        uses: actions/checkout@v4
+
+      - name: Install Android NDK r27c
+        uses: nttld/setup-ndk@v1
+        id: ndk
+        with:
+          ndk-version: r27c
+          add-to-path: false
+
+      - name: Verify source snapshot and toolchain
+        run: |
+          set -euo pipefail
+          test -s Makefile
+          test -s engine/nnue/network.hpp
+          grep -q '^#define INPUT_SIZE 768$' engine/nnue/network.hpp
+          grep -q '^#define NINPUTS 16$' engine/nnue/network.hpp
+          grep -q '^#define NTHREATS 60144$' engine/nnue/network.hpp
+          NDK_HOME="${{ steps.ndk.outputs.ndk-path }}"
+          echo "ANDROID_NDK_HOME=$NDK_HOME" >> "$GITHUB_ENV"
+          "$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang++" --version
+          grep -q 'Pkg.Revision = 27.2.12479018' "$NDK_HOME/source.properties"
+
+      - name: Build and verify ARM64 NEON and Dotprod
+        env:
+          PZ_NNUE_URL: ${{ inputs.nnue_url != '' && inputs.nnue_url || 'https://github.com/kevlu8/PZChessBot-Networks/releases/latest/download/nnue.bin' }}
+        run: bash scripts/build-android-arm64.sh
+
+      - name: Upload NEON artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PZChessBot-Android-ARM64-NEON
+          path: artifacts/arm64-neon/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload Dotprod artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PZChessBot-Android-ARM64-Dotprod
+          path: artifacts/arm64-dotprod/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload NNUE checksum and build validation
+        uses: actions/upload-artifact@v4
+        with:
+          name: PZChessBot-Android-Build-Validation
+          path: artifacts/NNUE-SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 30
