@@ -29,7 +29,13 @@ grep -q 'Pkg.Revision = 27.2.12479018' "$NDK_VERSION_FILE" || {
 NNUE_FILE="${PZ_NNUE_FILE:-$ROOT/nnue.bin}"
 if [[ "$NNUE_FILE" != /* ]]; then NNUE_FILE="$ROOT/$NNUE_FILE"; fi
 NNUE_URL="${PZ_NNUE_URL:-https://github.com/kevlu8/PZChessBot-Networks/releases/latest/download/nnue.bin}"
-EXPECTED_NNUE_BYTES=86921760
+# The current NNUE layout includes both NTHREATS and the NPP (pawn-pair)
+# input rows declared in engine/nnue/network.hpp. For this source snapshot:
+#   INPUT_SIZE=768, NINPUTS=16, NTHREATS=59808, NPP=4560,
+#   L1_SIZE=1024, L2_SIZE=16, L3_SIZE=32, NBUCKETS=8.
+# These dimensions produce a 91,247,136-byte tensor payload. The official
+# network file is padded to the next 64-byte boundary (91,247,168 bytes).
+EXPECTED_NNUE_BYTES=91247136
 # The published raw network may include up to the next 64-byte boundary.
 # This source consumes exactly EXPECTED_NNUE_BYTES; any alignment tail is ignored.
 PADDED_NNUE_BYTES=$(( (EXPECTED_NNUE_BYTES + 63) / 64 * 64 ))
