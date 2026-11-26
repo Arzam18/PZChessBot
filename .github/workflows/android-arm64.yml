@@ -1,3 +1,4 @@
+
 name: PZChessBot Android ARM64
 
 on:
@@ -19,9 +20,11 @@ jobs:
   build:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+
     defaults:
       run:
         shell: bash
+
     steps:
       - name: Checkout PZChessBot source
         uses: actions/checkout@v4
@@ -34,22 +37,74 @@ jobs:
           add-to-path: false
 
       - name: Verify source snapshot and toolchain
+        env:
+          NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
         run: |
           set -euo pipefail
+
+          echo "===== Verify PZChessBot source ====="
+
           test -s Makefile
           test -s engine/nnue/network.hpp
-          grep -q '^#define INPUT_SIZE 768$' engine/nnue/network.hpp
-          grep -q '^#define NINPUTS 16$' engine/nnue/network.hpp
-          grep -q '^#define NTHREATS 60144$' engine/nnue/network.hpp
-          NDK_HOME="${{ steps.ndk.outputs.ndk-path }}"
+          test -s scripts/build-android-arm64.sh
+
+          grep -Eq '^#define INPUT_SIZE[[:space:]]+768$' engine/nnue/network.hpp
+          grep -Eq '^#define NINPUTS[[:space:]]+16$' engine/nnue/network.hpp
+
+          # Correct value for source commit c86ee7cf6ba1c79b31a433cbb08a7db3a29f486c
+          grep -Eq '^#define NTHREATS[[:space:]]+59808$' engine/nnue/network.hpp
+
+          echo "NNUE architecture checks passed."
+          grep -E '^#define (INPUT_SIZE|NINPUTS|NTHREATS)[[:space:]]+' \
+            engine/nnue/network.hpp
+
+          echo "===== Verify NDK r27c ====="
+
+          test -n "$NDK_HOME"
+          test -d "$NDK_HOME"
+
+          NDK_BIN="$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          ANDROID_CXX="$NDK_BIN/aarch64-linux-android24-clang++"
+
+          test -x "$ANDROID_CXX"
+          test -x "$NDK_BIN/llvm-objdump"
+          test -x "$NDK_BIN/llvm-readelf"
+
+          test -s "$NDK_HOME/source.properties"
+
+          NDK_REVISION="$(sed -n 's/^Pkg.Revision = //p' "$NDK_HOME/source.properties" | tr -d '\r')"
+
+          if [[ "$NDK_REVISION" != "27.2.12479018" ]]; then
+            echo "ERROR: Expected NDK r27c (27.2.12479018)."
+            echo "Actual NDK revision: $NDK_REVISION"
+            cat "$NDK_HOME/source.properties"
+            exit 1
+          fi
+
+          "$ANDROID_CXX" --version
+
           echo "ANDROID_NDK_HOME=$NDK_HOME" >> "$GITHUB_ENV"
-          "$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang++" --version
-          grep -q 'Pkg.Revision = 27.2.12479018' "$NDK_HOME/source.properties"
+          echo "ANDROID_NDK_ROOT=$NDK_HOME" >> "$GITHUB_ENV"
+
+          {
+            echo "### PZChessBot source verification"
+            echo "- Source commit: $GITHUB_SHA"
+            echo "- NNUE INPUT_SIZE: 768"
+            echo "- NNUE NINPUTS: 16"
+            echo "- NNUE NTHREATS: 59808"
+            echo "- Android ABI: arm64-v8a"
+            echo "- Android API: 24"
+            echo "- NDK: r27c (27.2.12479018)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          echo "Source and Android NDK verification passed."
 
       - name: Build and verify ARM64 NEON and Dotprod
         env:
           PZ_NNUE_URL: ${{ inputs.nnue_url != '' && inputs.nnue_url || 'https://github.com/kevlu8/PZChessBot-Networks/releases/latest/download/nnue.bin' }}
-        run: bash scripts/build-android-arm64.sh
+        run: |
+          set -euo pipefail
+          bash scripts/build-android-arm64.sh
 
       - name: Upload NEON artifact
         uses: actions/upload-artifact@v4
